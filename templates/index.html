@@ -652,7 +652,7 @@ tbody tr:last-child td { border-bottom:none; }
 </div>
 
 <script>
-const API = 'http://localhost:5000/api';
+const API = window.location.origin + "/api";
 let map, allResults = [], activeFilter = 'ALL';
 let markers = [], chartInstances = {};
 
