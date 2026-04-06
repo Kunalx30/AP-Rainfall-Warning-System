@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AP Rainfall Early Warning System</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --red:#ef4444; --red-bg:#fef2f2; --red-border:#fecaca;
+  --orange:#f97316; --orange-bg:#fff7ed; --orange-border:#fed7aa;
+  --yellow:#eab308; --yellow-bg:#fefce8; --yellow-border:#fef08a;
+  --green:#22c55e; --green-bg:#f0fdf4; --green-border:#bbf7d0;
+  --blue:#3b82f6;
+  --ink:#0f172a; --ink2:#334155; --ink3:#64748b; --ink4:#94a3b8;
+  --surface:#ffffff; --page:#f8fafc; --border:#e2e8f0; --border2:#f1f5f9;
+}
+
+body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--page); color:var(--ink); -webkit-font-smoothing:antialiased; overflow:hidden; }
+
+/* ── HEADER ── */
+.header {
+  background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 50%,#0f3460 100%);
+  color:white; padding:0 20px; height:58px;
+  display:flex; align-items:center; justify-content:space-between;
+  position:relative; overflow:hidden; z-index:100;
+}
+.header::before {
+  content:''; position:absolute; inset:0;
+  background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.header-brand { display:flex; align-items:center; gap:12px; position:relative; }
+.header-icon {
+  width:36px; height:36px; background:rgba(59,130,246,0.25);
+  border:1px solid rgba(59,130,246,0.4); border-radius:9px;
+  display:flex; align-items:center; justify-content:center; font-size:18px;
+  flex-shrink:0;
+}
+.header h1 { font-size:15px; font-weight:700; letter-spacing:-0.3px; line-height:1.2; }
+.header p  { font-size:10px; opacity:0.5; margin-top:1px; font-weight:400; letter-spacing:0.3px; }
+.header-right { display:flex; align-items:center; gap:14px; position:relative; flex-shrink:0; }
+.live-badge {
+  display:flex; align-items:center; gap:5px;
+  background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3);
+  border-radius:20px; padding:3px 10px;
+  font-size:10px; font-weight:700; color:#4ade80; letter-spacing:0.5px;
+}
+.live-dot { width:5px; height:5px; border-radius:50%; background:#4ade80; animation:pulse-dot 2s ease-in-out infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} }
+#clock { font-family:'JetBrains Mono',monospace; font-size:11px; opacity:0.5; }
+.ml-tag { font-size:9px; opacity:0.4; font-weight:500; letter-spacing:0.5px; text-align:right; margin-top:2px; }
+
+/* mobile menu button */
+.menu-btn {
+  display:none; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);
+  border-radius:8px; color:white; padding:7px 10px; cursor:pointer;
+  font-size:16px; align-items:center; justify-content:center;
+  transition:all 0.2s; flex-shrink:0;
+}
+.menu-btn:hover { background:rgba(255,255,255,0.2); }
+
+/* ── LAYOUT ── */
+.container { display:flex; height:calc(100vh - 58px); position:relative; }
+
+/* ── LEFT PANEL ── */
+.left-panel {
+  width:340px; min-width:320px;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  display:flex; flex-direction:column;
+  transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  z-index:50;
+}
+.right-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+
+/* overlay for mobile */
+.panel-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:40;
+  animation:fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ── FORM ── */
+.input-section { padding:16px 20px 12px; border-bottom:1px solid var(--border); }
+.input-section-head {
+  font-size:11px; font-weight:700; color:var(--ink3); text-transform:uppercase;
+  letter-spacing:1px; margin-bottom:14px;
+  display:flex; align-items:center; gap:6px;
+}
+.input-section-head .dot { width:5px; height:5px; border-radius:50%; background:var(--blue); display:inline-block; }
+
+.form-group { margin-bottom:10px; }
+.form-group label {
+  display:block; font-size:11px; font-weight:600; color:var(--ink3);
+  margin-bottom:5px; letter-spacing:0.3px; text-transform:uppercase;
+}
+.form-group select,
+.form-group input {
+  width:100%; padding:9px 12px;
+  border:1.5px solid var(--border); border-radius:8px;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:13px; font-weight:500; color:var(--ink);
+  background:var(--page); outline:none;
+  transition:border-color 0.15s,box-shadow 0.15s;
+  -webkit-appearance:none;
+}
+.form-group select:focus,
+.form-group input:focus {
+  border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(59,130,246,0.1);
+  background:white;
+}
+.row-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+.btn-predict {
+  width:100%; padding:11px;
+  background:linear-gradient(135deg,#2563eb,#1d4ed8);
+  color:white; border:none; border-radius:10px;
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:13px; font-weight:700; letter-spacing:0.3px;
+  cursor:pointer; margin-top:6px; transition:all 0.2s;
+  box-shadow:0 4px 14px rgba(37,99,235,0.3);
+  display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.btn-predict:hover   { transform:translateY(-1px); box-shadow:0 6px 20px rgba(37,99,235,0.4); }
+.btn-predict:active  { transform:translateY(0); }
+.btn-predict:disabled{ opacity:0.6; cursor:not-allowed; transform:none; }
+
+/* ── SUMMARY CARDS ── */
+.summary-section { padding:14px 20px; border-bottom:1px solid var(--border); }
+.summary-label { font-size:11px; font-weight:700; color:var(--ink3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; }
+.summary-cards { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.s-card { border-radius:10px; padding:11px 13px; border:1.5px solid; display:flex; align-items:center; gap:10px; }
+.s-card .count { font-size:24px; font-weight:800; line-height:1; }
+.s-card .info .label { font-size:11px; font-weight:600; opacity:0.7; }
+.s-card .info .sub   { font-size:10px; opacity:0.5; margin-top:1px; }
+.s-card.red    { background:var(--red-bg);    border-color:var(--red-border);    color:#dc2626; }
+.s-card.orange { background:var(--orange-bg); border-color:var(--orange-border); color:#ea580c; }
+.s-card.yellow { background:var(--yellow-bg); border-color:var(--yellow-border); color:#ca8a04; }
+.s-card.green  { background:var(--green-bg);  border-color:var(--green-border);  color:#16a34a; }
+
+/* ── TABLE ── */
+.table-section { padding:14px 20px; flex:1; display:flex; flex-direction:column; }
+.table-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.table-head span { font-size:11px; font-weight:700; color:var(--ink3); text-transform:uppercase; letter-spacing:1px; }
+.filter-btns { display:flex; gap:4px; }
+.filter-btn {
+  padding:3px 9px; border:1.5px solid var(--border); border-radius:6px;
+  font-size:10px; font-weight:700; cursor:pointer; background:white;
+  color:var(--ink3); transition:all 0.15s;
+  font-family:'Plus Jakarta Sans',sans-serif;
+}
+.filter-btn.active { background:var(--blue); color:white; border-color:var(--blue); }
+
+.table-wrap { overflow-y:auto; flex:1; max-height:220px; border-radius:10px; border:1px solid var(--border); }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+thead th {
+  background:var(--page); padding:9px 12px;
+  text-align:left; font-weight:700; font-size:10px;
+  color:var(--ink3); letter-spacing:0.5px; text-transform:uppercase;
+  position:sticky; top:0; border-bottom:1px solid var(--border);
+}
+tbody td { padding:8px 12px; border-bottom:1px solid var(--border2); }
+tbody tr:hover { background:#f8fafc; cursor:pointer; }
+tbody tr:last-child td { border-bottom:none; }
+
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 9px; border-radius:20px;
+  font-size:10px; font-weight:700; letter-spacing:0.5px;
+}
+.badge.RED    { background:var(--red-bg);    color:#dc2626; border:1px solid var(--red-border); }
+.badge.ORANGE { background:var(--orange-bg); color:#ea580c; border:1px solid var(--orange-border); }
+.badge.YELLOW { background:var(--yellow-bg); color:#ca8a04; border:1px solid var(--yellow-border); }
+.badge.GREEN  { background:var(--green-bg);  color:#16a34a; border:1px solid var(--green-border); }
+
+/* ── WATERMARK ── */
+.watermark {
+  padding:10px 20px;
+  text-align:center;
+  font-size:11px;
+  color:var(--ink4);
+  border-top:1px solid var(--border2);
+  background:var(--surface);
+  flex-shrink:0;
+  letter-spacing:0.3px;
+}
+.watermark span.name { font-weight:700; color:var(--blue); }
+.watermark .heart { color:#ef4444; font-size:13px; }
+
+/* ── TABS ── */
+.tabs {
+  display:flex; background:white;
+  border-bottom:1px solid var(--border);
+  padding:0 16px; gap:0; overflow-x:auto;
+  scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar { display:none; }
+.tab {
+  padding:13px 14px; font-size:12px; font-weight:600;
+  cursor:pointer; border-bottom:2.5px solid transparent;
+  color:var(--ink4); transition:all 0.15s; white-space:nowrap;
+  flex-shrink:0;
+}
+.tab:hover  { color:var(--ink2); }
+.tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+.tab-icon   { font-size:13px; margin-right:5px; }
+
+.tab-content { flex:1; overflow:hidden; display:none; }
+.tab-content.active { display:flex; flex-direction:column; }
+
+/* ── MAP ── */
+#map { flex:1; min-height:0; }
+
+/* ── CHARTS ── */
+.charts-area {
+  flex:1; overflow-y:auto; padding:16px;
+  display:grid; grid-template-columns:1fr 1fr; gap:14px;
+}
+.chart-card {
+  background:white; border-radius:12px; padding:18px;
+  border:1px solid var(--border);
+}
+.chart-card h4 {
+  font-size:11px; font-weight:700; color:var(--ink2);
+  margin-bottom:14px; text-transform:uppercase; letter-spacing:0.5px;
+  display:flex; align-items:center; gap:8px;
+}
+.chart-card h4::before {
+  content:''; width:3px; height:13px;
+  background:var(--blue); border-radius:2px; flex-shrink:0;
+}
+.chart-card.wide { grid-column:span 2; }
+.chart-wrap { position:relative; height:180px; }
+
+/* ── INFRA ── */
+.infra-area { flex:1; overflow-y:auto; padding:16px; }
+.infra-card { background:white; border-radius:12px; padding:18px; margin-bottom:14px; border:1px solid var(--border); }
+.infra-card h4 {
+  font-size:11px; font-weight:700; color:var(--ink2);
+  margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;
+  display:flex; align-items:center; gap:8px;
+}
+.infra-card h4::before { content:''; width:3px; height:13px; background:var(--blue); border-radius:2px; flex-shrink:0; }
+.infra-card p.sub { font-size:11px; color:var(--ink4); margin-bottom:12px; line-height:1.6; }
+.infra-table-wrap { overflow-x:auto; border-radius:8px; border:1px solid var(--border); }
+.infra-table { width:100%; border-collapse:collapse; font-size:11px; }
+.infra-table th {
+  background:var(--page); padding:8px 11px; text-align:left;
+  font-weight:700; font-size:9.5px; color:var(--ink3);
+  white-space:nowrap; letter-spacing:0.5px; text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+}
+.infra-table td { padding:7px 11px; border-bottom:1px solid var(--border2); color:var(--ink2); }
+.infra-table tr:last-child td { border-bottom:none; }
+.infra-table tr:hover td { background:var(--page); }
+
+.name-pill {
+  display:inline-block; background:#eff6ff; color:#1d4ed8;
+  border-radius:5px; padding:2px 7px; font-size:10px; font-weight:600;
+  max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:'JetBrains Mono',monospace;
+}
+.name-pill.embank { background:#fff7ed; color:#c2410c; }
+
+.risk-bar-wrap { display:flex; align-items:center; gap:5px; }
+.risk-bar-bg   { flex:1; height:4px; background:var(--border); border-radius:3px; }
+.risk-bar-fill { height:4px; border-radius:3px; }
+
+/* ── EMPTY ── */
+.empty-state {
+  display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:8px;
+  color:var(--ink4); font-size:13px;
+  text-align:center; padding:28px 20px;
+}
+.empty-icon { font-size:30px; opacity:0.5; }
+
+.spinner {
+  width:16px; height:16px; border:2px solid rgba(255,255,255,0.3);
+  border-top-color:white; border-radius:50%;
+  animation:spin 0.7s linear infinite;
+}
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* ── POPUP ── */
+.leaflet-popup-content {
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:12px; line-height:1.6; min-width:200px;
+}
+.popup-title { font-weight:800; font-size:13px; margin-bottom:7px; color:#0f172a; }
+.popup-row { display:flex; justify-content:space-between; gap:12px; margin:2px 0; }
+.popup-row span:first-child { color:#64748b; }
+.popup-row span:last-child  { font-weight:600; color:#0f172a; }
+.popup-divider { border:none; border-top:1px solid #e2e8f0; margin:7px 0; }
+.popup-name {
+  font-size:10px; color:#1d4ed8; background:#eff6ff;
+  border-radius:4px; padding:1px 6px;
+  font-family:'JetBrains Mono',monospace;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar       { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+::-webkit-scrollbar-thumb:hover { background:var(--ink4); }
+
+/* ════════════════════════════════
+   RESPONSIVE — TABLET & MOBILE
+   ════════════════════════════════ */
+@media (max-width: 768px) {
+  body { overflow:hidden; }
+
+  .menu-btn { display:flex; }
+
+  #clock,
+  .ml-tag { display:none; }
+
+  .header h1 { font-size:13px; }
+  .header p  { display:none; }
+
+  /* Panel slides in from left as drawer */
+  .left-panel {
+    position:fixed;
+    top:58px; left:0;
+    height:calc(100vh - 58px);
+    width:min(320px, 90vw);
+    transform:translateX(-100%);
+    box-shadow:4px 0 24px rgba(0,0,0,0.15);
+    z-index:60;
+    transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  }
+  .left-panel.open { transform:translateX(0); }
+
+  .panel-overlay { display:block; }
+  .panel-overlay.hidden { display:none; }
+
+  .right-panel { width:100%; }
+
+  .charts-area {
+    grid-template-columns:1fr;
+    padding:12px;
+  }
+  .chart-card.wide { grid-column:span 1; }
+
+  .summary-cards { grid-template-columns:1fr 1fr; }
+}
+
+@media (max-width: 480px) {
+  .header { padding:0 12px; }
+  .header h1 { font-size:12px; }
+  .header-icon { width:30px; height:30px; font-size:15px; }
+  .live-badge { padding:3px 8px; font-size:9px; }
+
+  .tabs { padding:0 8px; }
+  .tab  { padding:11px 10px; font-size:11px; }
+
+  .charts-area { padding:10px; gap:10px; }
+  .chart-card  { padding:14px; }
+  .chart-wrap  { height:160px; }
+
+  .input-section { padding:14px 16px 10px; }
+  .summary-section { padding:12px 16px; }
+  .table-section { padding:12px 16px; }
+
+  .infra-area { padding:10px; }
+  .infra-card { padding:14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-brand">
+    <!-- Mobile menu toggle -->
+    <button class="menu-btn" id="menu-btn" onclick="togglePanel()" title="Open inputs">
+      <svg id="menu-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="header-icon">🌧️</div>
+    <div>
+      <h1>AP Rainfall Early Warning System</h1>
+      <p>Andhra Pradesh · Agricultural Flood Risk Intelligence</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <div>
+      <div id="clock"></div>
+      <div class="ml-tag">RANDOM FOREST ML</div>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile overlay -->
+<div class="panel-overlay hidden" id="panel-overlay" onclick="closePanel()"></div>
+
+<div class="container">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel" id="left-panel">
+
+    <!-- Input Form -->
+    <div class="input-section">
+      <div class="input-section-head">
+        <span class="dot"></span>
+        Prediction Inputs
+      </div>
+
+      <div class="form-group">
+        <label>District *</label>
+        <select id="sel-district">
+          <option value="">— Select District —</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Mandal <span style="opacity:0.5;font-weight:400;text-transform:none">(optional)</span></label>
+        <select id="sel-mandal" disabled>
+          <option value="">— All Mandals —</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Date *</label>
+        <input type="date" id="inp-date"/>
+      </div>
+
+      <div class="form-group">
+        <label>Today's Rainfall (mm) *</label>
+        <input type="number" id="inp-rain" min="0" max="500" step="0.1" placeholder="e.g. 75.5"/>
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>3-Day (mm)</label>
+          <input type="number" id="inp-3day" min="0" step="0.1" placeholder="Auto"/>
+        </div>
+        <div class="form-group">
+          <label>7-Day (mm)</label>
+          <input type="number" id="inp-7day" min="0" step="0.1" placeholder="Auto"/>
+        </div>
+      </div>
+
+      <button class="btn-predict" id="btn-predict" onclick="runPrediction()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Generate Risk Alert
+      </button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-section" id="summary-section" style="display:none">
+      <div class="summary-label">District Summary</div>
+      <div class="summary-cards">
+        <div class="s-card red">
+          <div class="count" id="cnt-red">0</div>
+          <div class="info"><div class="label">Extreme</div><div class="sub">RED alert</div></div>
+        </div>
+        <div class="s-card orange">
+          <div class="count" id="cnt-orange">0</div>
+          <div class="info"><div class="label">High Risk</div><div class="sub">ORANGE alert</div></div>
+        </div>
+        <div class="s-card yellow">
+          <div class="count" id="cnt-yellow">0</div>
+          <div class="info"><div class="label">Moderate</div><div class="sub">YELLOW alert</div></div>
+        </div>
+        <div class="s-card green">
+          <div class="count" id="cnt-green">0</div>
+          <div class="info"><div class="label">Safe</div><div class="sub">No risk</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Table -->
+    <div class="table-section">
+      <div class="table-head">
+        <span>Village Alerts</span>
+        <div class="filter-btns">
+          <button class="filter-btn active" onclick="filterTable('ALL')">All</button>
+          <button class="filter-btn" onclick="filterTable('RED')"    style="color:#dc2626">RED</button>
+          <button class="filter-btn" onclick="filterTable('ORANGE')" style="color:#ea580c">ORG</button>
+          <button class="filter-btn" onclick="filterTable('YELLOW')" style="color:#ca8a04">YEL</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Village</th><th>Mandal</th><th>mm</th><th>Alert</th>
+            </tr>
+          </thead>
+          <tbody id="village-tbody">
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <div class="empty-icon">🗺️</div>
+                Select a district and generate alerts
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Watermark -->
+    <div class="watermark">
+      Made with <span class="heart">❤️</span> by <span class="name">Kunal</span>
+    </div>
+
+  </div><!-- end left-panel -->
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('map')"><span class="tab-icon">🗺️</span>Risk Map</div>
+      <div class="tab" onclick="switchTab('charts')"><span class="tab-icon">📈</span>Analytics</div>
+      <div class="tab" onclick="switchTab('infra')"><span class="tab-icon">🏗️</span>Infrastructure</div>
+    </div>
+
+    <!-- MAP TAB -->
+    <div class="tab-content active" id="tab-map">
+      <div id="map"></div>
+    </div>
+
+    <!-- CHARTS TAB -->
+    <div class="tab-content" id="tab-charts">
+      <div class="charts-area">
+        <div class="chart-card">
+          <h4>Alert Level Distribution</h4>
+          <div class="chart-wrap"><canvas id="chart-alert-dist"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>Villages by Risk Level</h4>
+          <div class="chart-wrap"><canvas id="chart-risk-bar"></canvas></div>
+        </div>
+        <div class="chart-card wide">
+          <h4>Top 10 Highest Risk Villages</h4>
+          <div class="chart-wrap" style="height:200px"><canvas id="chart-top-villages"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>Canal Proximity Distribution</h4>
+          <div class="chart-wrap"><canvas id="chart-canal-dist"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h4>Rainfall Category Breakdown</h4>
+          <div class="chart-wrap"><canvas id="chart-rain-cat"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INFRASTRUCTURE TAB -->
+    <div class="tab-content" id="tab-infra">
+      <div class="infra-area">
+
+        <div class="infra-card">
+          <h4>Village / Mandal Risk × Infrastructure</h4>
+          <div class="infra-table-wrap">
+            <table class="infra-table">
+              <thead><tr>
+                <th>Village</th><th>Mandal</th><th>Alert</th>
+                <th>Canal km</th><th>Nearest Canal</th>
+                <th>Embank km</th><th>Nearest Embank</th>
+                <th>Canal Score</th><th>Embank Score</th><th>Conf.</th>
+              </tr></thead>
+              <tbody id="infra-tbody">
+                <tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🏗️</div>Run prediction to see infrastructure data</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="infra-card">
+          <h4>High Risk Villages Near Infrastructure</h4>
+          <div class="infra-table-wrap">
+            <table class="infra-table">
+              <thead><tr>
+                <th>Village</th><th>Mandal</th><th>Rainfall</th>
+                <th>Canal km</th><th>Nearest Canal</th>
+                <th>Embank km</th><th>Nearest Embank</th>
+                <th>Alert</th><th>Action</th>
+              </tr></thead>
+              <tbody id="highrisk-tbody">
+                <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">✅</div>No high-risk villages detected</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="infra-card">
+          <h4>ML Probability Breakdown — Per Village</h4>
+          <p class="sub">Shows the Random Forest model's confidence for each alert level. Higher % = model is more certain about that category.</p>
+          <div class="infra-table-wrap">
+            <table class="infra-table">
+              <thead><tr>
+                <th>Village</th><th>Mandal</th><th>Prediction</th>
+                <th>GREEN %</th><th>YELLOW %</th><th>ORANGE %</th><th>RED %</th><th>Conf.</th>
+              </tr></thead>
+              <tbody id="prob-tbody">
+                <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📊</div>Run prediction to see probability breakdown</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="infra-card">
+          <h4>Rainfall Accumulation Summary</h4>
+          <p class="sub">Shows rainfall buildup across time windows. High 7-day totals indicate sustained wet conditions — increasing flood risk.</p>
+          <div class="infra-table-wrap">
+            <table class="infra-table">
+              <thead><tr>
+                <th>Village</th><th>Mandal</th><th>Today mm</th>
+                <th>3-Day mm</th><th>7-Day mm</th><th>Category</th><th>Monsoon</th><th>Alert</th>
+              </tr></thead>
+              <tbody id="rain-tbody">
+                <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🌧️</div>Run prediction to see rainfall data</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="infra-card">
+          <h4>Risk Factor Summary — Priority Action List</h4>
+          <p class="sub">Combines rainfall intensity, canal proximity, and embankment risk into a single overall score. Use for emergency response prioritization.</p>
+          <div class="infra-table-wrap">
+            <table class="infra-table">
+              <thead><tr>
+                <th>#</th><th>Village</th><th>Mandal</th>
+                <th>Rain Score</th><th>Canal Risk</th><th>Embank Risk</th>
+                <th>Overall</th><th>Alert</th><th>Action</th>
+              </tr></thead>
+              <tbody id="risk-factor-tbody">
+                <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">⚡</div>Run prediction to see risk factor summary</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- end right-panel -->
+</div>
+
+<script>
+const API = 'http://localhost:5000/api';
+let map, allResults = [], activeFilter = 'ALL';
+let markers = [], chartInstances = {};
+
+/* ── CLOCK ── */
+function updateClock() {
+  const now = new Date();
+  const el = document.getElementById('clock');
+  if (el) el.textContent =
+    now.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'}) + '  ' +
+    now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ── MOBILE PANEL TOGGLE ── */
+const ICON_MENU  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`;
+const ICON_CLOSE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+function togglePanel() {
+  const panel   = document.getElementById('left-panel');
+  const overlay = document.getElementById('panel-overlay');
+  const btn     = document.getElementById('menu-btn');
+  const isOpen  = panel.classList.toggle('open');
+  overlay.classList.toggle('hidden', !isOpen);
+  btn.innerHTML = isOpen ? ICON_CLOSE : ICON_MENU;
+}
+function closePanel() {
+  const panel   = document.getElementById('left-panel');
+  const overlay = document.getElementById('panel-overlay');
+  const btn     = document.getElementById('menu-btn');
+  panel.classList.remove('open');
+  overlay.classList.add('hidden');
+  btn.innerHTML = ICON_MENU;
+}
+// Close on resize to desktop
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) closePanel();
+});
+
+/* ── MAP ── */
+function initMap() {
+  map = L.map('map').setView([15.9129, 79.7400], 7);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution:'© OpenStreetMap © CARTO', maxZoom:19
+  }).addTo(map);
+}
+initMap();
+
+/* ── DISTRICTS ── */
+async function loadDistricts() {
+  try {
+    const res  = await fetch(`${API}/districts`);
+    const data = await res.json();
+    const sel  = document.getElementById('sel-district');
+    data.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = d;
+      sel.appendChild(opt);
+    });
+  } catch(e) { console.warn('Districts not loaded (no API)'); }
+}
+loadDistricts();
+
+document.getElementById('inp-date').value = new Date().toISOString().split('T')[0];
+
+document.getElementById('sel-district').addEventListener('change', async function() {
+  const district  = this.value;
+  const mandalSel = document.getElementById('sel-mandal');
+  mandalSel.innerHTML = '<option value="">— All Mandals —</option>';
+  mandalSel.disabled  = true;
+  if (!district) return;
+  try {
+    const res  = await fetch(`${API}/mandals/${encodeURIComponent(district)}`);
+    const data = await res.json();
+    data.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = m;
+      mandalSel.appendChild(opt);
+    });
+    mandalSel.disabled = false;
+  } catch(e) {}
+});
+
+/* ── TABS ── */
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['map','charts','infra'][i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'map')    setTimeout(() => map.invalidateSize(), 50);
+  if (name === 'charts' && allResults.length) renderCharts(allResults);
+}
+
+/* ── PREDICTION ── */
+async function runPrediction() {
+  const district = document.getElementById('sel-district').value;
+  const mandal   = document.getElementById('sel-mandal').value;
+  const date     = document.getElementById('inp-date').value;
+  const rainMm   = document.getElementById('inp-rain').value;
+  const rain3day = document.getElementById('inp-3day').value;
+  const rain7day = document.getElementById('inp-7day').value;
+
+  if (!district) { alert('Please select a district'); return; }
+  if (!date)     { alert('Please select a date');     return; }
+  if (!rainMm)   { alert('Please enter rainfall mm'); return; }
+
+  const btn = document.getElementById('btn-predict');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Predicting…';
+
+  // On mobile, close panel after predict so map is visible
+  if (window.innerWidth <= 768) closePanel();
+
+  try {
+    const body = {
+      district, date, rainfall_mm: parseFloat(rainMm),
+      ...(mandal   && { mandal }),
+      ...(rain3day && { rainfall_3day: parseFloat(rain3day) }),
+      ...(rain7day && { rainfall_7day: parseFloat(rain7day) }),
+    };
+    const res  = await fetch(`${API}/predict`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.error) { alert('Error: ' + data.error); return; }
+
+    allResults = data.results;
+    updateSummary(data.summary);
+    renderTable(allResults);
+    renderMap(allResults);
+    renderInfraTable(allResults);
+    renderHighRiskTable(allResults);
+    renderProbTable(allResults);
+    renderRainTable(allResults);
+    renderRiskFactorTable(allResults);
+    renderCharts(allResults);
+  } catch(e) {
+    alert('Connection error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Risk Alert';
+  }
+}
+
+/* ── SUMMARY ── */
+function updateSummary(summary) {
+  document.getElementById('summary-section').style.display = 'block';
+  document.getElementById('cnt-red').textContent    = summary.RED    || 0;
+  document.getElementById('cnt-orange').textContent = summary.ORANGE || 0;
+  document.getElementById('cnt-yellow').textContent = summary.YELLOW || 0;
+  document.getElementById('cnt-green').textContent  = summary.GREEN  || 0;
+}
+
+/* ── TABLE ── */
+function filterTable(level) {
+  activeFilter = level;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.toggle('active',
+      (level === 'ALL' && b.textContent === 'All') ||
+      (level !== 'ALL' && b.textContent.includes(level.slice(0,3)))
+    );
+  });
+  renderTable(allResults);
+}
+
+function renderTable(results) {
+  const tbody    = document.getElementById('village-tbody');
+  const filtered = activeFilter === 'ALL' ? results : results.filter(r => r.alert_level === activeFilter);
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-icon">✅</div>No villages in this category</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(r => `
+    <tr onclick="focusVillage(${r.latitude},${r.longitude},'${r.village}')">
+      <td><strong style="font-weight:600">${r.village}</strong></td>
+      <td style="color:var(--ink3)">${r.mandal}</td>
+      <td><span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">${r.rainfall_mm}</span></td>
+      <td><span class="badge ${r.alert_level}">${r.alert_level}</span></td>
+    </tr>`).join('');
+}
+
+/* ── MAP MARKERS ── */
+const COLORS = { RED:'#ef4444', ORANGE:'#f97316', YELLOW:'#eab308', GREEN:'#22c55e' };
+
+function renderMap(results) {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  const bounds = [];
+  results.forEach(r => {
+    const color  = COLORS[r.alert_level];
+    const radius = r.alert_level==='RED' ? 10 : r.alert_level==='ORANGE' ? 8 : r.alert_level==='YELLOW' ? 6 : 5;
+    const circle = L.circleMarker([r.latitude, r.longitude], {
+      radius, fillColor:color, color:'white', weight:2, opacity:1, fillOpacity:0.88
+    });
+    const canalLine  = r.nearest_canal_name && r.nearest_canal_name !== 'N/A'
+      ? `<div class="popup-row"><span>Canal</span><span class="popup-name">🏞 ${r.nearest_canal_name}</span></div>` : '';
+    const embankLine = r.nearest_embankment_name && r.nearest_embankment_name !== 'N/A'
+      ? `<div class="popup-row"><span>Embankment</span><span class="popup-name">🌊 ${r.nearest_embankment_name}</span></div>` : '';
+
+    circle.bindPopup(`
+      <div class="popup-title">${r.alert_emoji} ${r.village}</div>
+      <div class="popup-row"><span>Mandal</span><span>${r.mandal}</span></div>
+      <div class="popup-row"><span>District</span><span>${r.district}</span></div>
+      <hr class="popup-divider"/>
+      <div class="popup-row"><span>Rainfall</span><span>${r.rainfall_mm} mm</span></div>
+      <div class="popup-row"><span>3-Day</span><span>${r.rainfall_3day} mm</span></div>
+      <div class="popup-row"><span>7-Day</span><span>${r.rainfall_7day} mm</span></div>
+      <hr class="popup-divider"/>
+      <div class="popup-row"><span>Canal</span><span>${r.dist_canal_km} km</span></div>
+      ${canalLine}
+      <div class="popup-row"><span>Embankment</span><span>${r.dist_embankment_km} km</span></div>
+      ${embankLine}
+      <hr class="popup-divider"/>
+      <div class="popup-row"><span><strong>Alert</strong></span>
+        <span style="color:${color};font-weight:700">${r.alert_emoji} ${r.alert_level}</span></div>
+      <div class="popup-row"><span>Confidence</span><span>${r.confidence_pct}%</span></div>
+      <div style="margin-top:6px;font-size:11px;color:#64748b">${r.alert_message}</div>
+    `);
+    circle.addTo(map);
+    markers.push(circle);
+    bounds.push([r.latitude, r.longitude]);
+  });
+  if (bounds.length) map.fitBounds(bounds, { padding:[30,30] });
+}
+
+function focusVillage(lat, lng) {
+  switchTab('map');
+  if (window.innerWidth <= 768) closePanel();
+  map.setView([lat, lng], 13);
+  markers.forEach(m => {
+    const pos = m.getLatLng();
+    if (Math.abs(pos.lat - lat) < 0.001 && Math.abs(pos.lng - lng) < 0.001) m.openPopup();
+  });
+}
+
+/* ── INFRA TABLES ── */
+function renderInfraTable(results) {
+  const tbody = document.getElementById('infra-tbody');
+  tbody.innerHTML = results.slice(0,100).map(r => {
+    const cScore = r.canal_proximity_score;
+    const eScore = r.embankment_proximity_score;
+    const cColor = cScore >= 4 ? '#ef4444' : cScore >= 3 ? '#f97316' : '#22c55e';
+    const eColor = eScore >= 4 ? '#ef4444' : eScore >= 3 ? '#f97316' : '#22c55e';
+    return `<tr>
+      <td><strong style="font-weight:600">${r.village}</strong></td>
+      <td style="color:var(--ink3)">${r.mandal}</td>
+      <td><span class="badge ${r.alert_level}">${r.alert_level}</span></td>
+      <td style="font-family:'JetBrains Mono',monospace">${r.dist_canal_km}</td>
+      <td><span class="name-pill">🏞 ${r.nearest_canal_name||'N/A'}</span></td>
+      <td style="font-family:'JetBrains Mono',monospace">${r.dist_embankment_km}</td>
+      <td><span class="name-pill embank">🌊 ${r.nearest_embankment_name||'N/A'}</span></td>
+      <td><div class="risk-bar-wrap"><div class="risk-bar-bg"><div class="risk-bar-fill" style="width:${cScore*20}%;background:${cColor}"></div></div><span style="font-size:11px;font-weight:700;color:${cColor}">${cScore}/5</span></div></td>
+      <td><div class="risk-bar-wrap"><div class="risk-bar-bg"><div class="risk-bar-fill" style="width:${eScore*20}%;background:${eColor}"></div></div><span style="font-size:11px;font-weight:700;color:${eColor}">${eScore}/5</span></div></td>
+      <td style="font-weight:600;color:var(--blue)">${r.confidence_pct}%</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderHighRiskTable(results) {
+  const tbody  = document.getElementById('highrisk-tbody');
+  const hiRisk = results.filter(r => ['RED','ORANGE'].includes(r.alert_level));
+  if (!hiRisk.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">✅</div>No high-risk villages</div></td></tr>`;
+    return;
+  }
+  const actions = { RED:'🚨 Immediate evacuation', ORANGE:'⚠️ Prepare emergency response' };
+  tbody.innerHTML = hiRisk.map(r => `<tr>
+    <td><strong style="font-weight:600">${r.village}</strong></td>
+    <td style="color:var(--ink3)">${r.mandal}</td>
+    <td style="font-family:'JetBrains Mono',monospace;font-weight:600">${r.rainfall_mm} mm</td>
+    <td>${r.dist_canal_km} km</td>
+    <td><span class="name-pill">🏞 ${r.nearest_canal_name||'N/A'}</span></td>
+    <td>${r.has_embankment_nearby ? r.dist_embankment_km+' km' : 'N/A'}</td>
+    <td><span class="name-pill embank">🌊 ${r.nearest_embankment_name||'N/A'}</span></td>
+    <td><span class="badge ${r.alert_level}">${r.alert_level}</span></td>
+    <td style="font-size:11px">${actions[r.alert_level]||''}</td>
+  </tr>`).join('');
+}
+
+function renderProbTable(results) {
+  const tbody = document.getElementById('prob-tbody');
+  if (!results.length) { tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📊</div>No data</div></td></tr>`; return; }
+  function probBar(pct,color) {
+    return `<div style="display:flex;align-items:center;gap:5px">
+      <div style="flex:1;height:4px;background:var(--border);border-radius:3px">
+        <div style="width:${pct}%;height:4px;background:${color};border-radius:3px"></div>
+      </div>
+      <span style="font-size:10px;font-weight:700;color:${color};min-width:30px;font-family:'JetBrains Mono',monospace">${pct}%</span>
+    </div>`;
+  }
+  tbody.innerHTML = results.slice(0,100).map(r => `<tr>
+    <td><strong style="font-weight:600">${r.village}</strong></td>
+    <td style="color:var(--ink3)">${r.mandal}</td>
+    <td><span class="badge ${r.alert_level}">${r.alert_level}</span></td>
+    <td>${probBar(r.prob_green,  '#22c55e')}</td>
+    <td>${probBar(r.prob_yellow, '#eab308')}</td>
+    <td>${probBar(r.prob_orange, '#f97316')}</td>
+    <td>${probBar(r.prob_red,    '#ef4444')}</td>
+    <td style="font-weight:700;color:var(--blue);font-family:'JetBrains Mono',monospace">${r.confidence_pct}%</td>
+  </tr>`).join('');
+}
+
+function renderRainTable(results) {
+  const tbody = document.getElementById('rain-tbody');
+  if (!results.length) { tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🌧️</div>No data</div></td></tr>`; return; }
+  const catColor = {'No Rain':'#94a3b8','Light':'#22c55e','Moderate':'#3b82f6','Heavy':'#f97316','Very Heavy':'#ef4444','Extremely Heavy':'#a855f7'};
+  tbody.innerHTML = results.slice(0,100).map(r => {
+    const cc   = catColor[r.rainfall_category] || '#94a3b8';
+    const avg3 = r.rainfall_3day / 3;
+    const trend = r.rainfall_mm > avg3*1.2 ? '📈 Rising' : r.rainfall_mm < avg3*0.8 ? '📉 Falling' : '➡️ Steady';
+    const monsoon = r.is_monsoon !== undefined
+      ? (r.is_monsoon ? '<span style="color:#16a34a;font-weight:700">✅ Yes</span>' : '<span style="color:var(--ink4)">No</span>') : '—';
+    return `<tr>
+      <td><strong style="font-weight:600">${r.village}</strong></td>
+      <td style="color:var(--ink3)">${r.mandal}</td>
+      <td style="font-weight:700;font-family:'JetBrains Mono',monospace">${r.rainfall_mm}</td>
+      <td style="font-family:'JetBrains Mono',monospace">${r.rainfall_3day}</td>
+      <td style="font-family:'JetBrains Mono',monospace">${r.rainfall_7day}</td>
+      <td><span style="background:${cc}18;color:${cc};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700">${r.rainfall_category}</span></td>
+      <td style="font-size:11px">${trend}</td>
+      <td><span class="badge ${r.alert_level}">${r.alert_level}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRiskFactorTable(results) {
+  const tbody = document.getElementById('risk-factor-tbody');
+  if (!results.length) { tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">⚡</div>No data</div></td></tr>`; return; }
+  const actions = {RED:'🚨 Immediate evacuation',ORANGE:'⚠️ Prepare emergency response',YELLOW:'👁 Monitor closely',GREEN:'✅ No action needed'};
+  const scored = results.map((r,idx) => {
+    const rainScore  = Math.min(r.rainfall_mm / 2, 40);
+    const canalScore = (r.canal_proximity_score / 5) * 30;
+    const embScore   = (r.embankment_proximity_score / 5) * 30;
+    return {...r, overall:Math.round(rainScore+canalScore+embScore), rainScore, canalScore, embScore, priority:idx+1};
+  });
+  const oc = s => s>=80?'#ef4444':s>=60?'#f97316':s>=40?'#eab308':'#22c55e';
+  function sBar(val,max,color) {
+    return `<div style="display:flex;align-items:center;gap:4px">
+      <div style="width:48px;height:4px;background:var(--border);border-radius:3px">
+        <div style="width:${(val/max)*100}%;height:4px;background:${color};border-radius:3px"></div>
+      </div>
+      <span style="font-size:10px;font-weight:700;color:${color};font-family:'JetBrains Mono',monospace">${Math.round(val)}</span>
+    </div>`;
+  }
+  tbody.innerHTML = scored.slice(0,100).map(r => `<tr>
+    <td style="font-weight:800;color:var(--ink3);text-align:center;font-family:'JetBrains Mono',monospace">#${r.priority}</td>
+    <td><strong style="font-weight:600">${r.village}</strong></td>
+    <td style="color:var(--ink3)">${r.mandal}</td>
+    <td>${sBar(r.rainScore,  40,'#3b82f6')}</td>
+    <td>${sBar(r.canalScore, 30,'#f97316')}</td>
+    <td>${sBar(r.embScore,   30,'#a855f7')}</td>
+    <td><div style="display:flex;align-items:center;gap:5px">
+      <div style="width:52px;height:5px;background:var(--border);border-radius:3px">
+        <div style="width:${r.overall}%;height:5px;background:${oc(r.overall)};border-radius:3px"></div>
+      </div>
+      <span style="font-weight:800;color:${oc(r.overall)};font-family:'JetBrains Mono',monospace;font-size:11px">${r.overall}/100</span>
+    </div></td>
+    <td><span class="badge ${r.alert_level}">${r.alert_level}</span></td>
+    <td style="font-size:11px;color:var(--ink2)">${actions[r.alert_level]}</td>
+  </tr>`).join('');
+}
+
+/* ── CHARTS ── */
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+const chartDefaults = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{ legend:{ labels:{ font:{ family:'Plus Jakarta Sans', size:11 } } } }
+};
+
+function renderCharts(results) {
+  destroyChart('alert-dist');
+  const counts = {RED:0,ORANGE:0,YELLOW:0,GREEN:0};
+  results.forEach(r => counts[r.alert_level]++);
+  chartInstances['alert-dist'] = new Chart(document.getElementById('chart-alert-dist'), {
+    type:'doughnut',
+    data:{ labels:['RED','ORANGE','YELLOW','GREEN'],
+      datasets:[{ data:[counts.RED,counts.ORANGE,counts.YELLOW,counts.GREEN],
+        backgroundColor:['#ef4444','#f97316','#eab308','#22c55e'],
+        borderWidth:3, borderColor:'white', hoverOffset:6 }]
+    },
+    options:{...chartDefaults, plugins:{legend:{position:'right',labels:{font:{family:'Plus Jakarta Sans',size:10},padding:10}}}}
+  });
+
+  destroyChart('risk-bar');
+  const mc = {};
+  results.filter(r => r.alert_level !== 'GREEN').forEach(r => { mc[r.mandal]=(mc[r.mandal]||0)+1; });
+  const top = Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  chartInstances['risk-bar'] = new Chart(document.getElementById('chart-risk-bar'), {
+    type:'bar',
+    data:{ labels:top.map(m=>m[0]), datasets:[{ label:'At-Risk Villages', data:top.map(m=>m[1]), backgroundColor:'#3b82f6', borderRadius:5, borderSkipped:false }] },
+    options:{...chartDefaults, plugins:{legend:{display:false}}, scales:{x:{ticks:{font:{size:9}}},y:{beginAtZero:true,ticks:{font:{size:9}}}}}
+  });
+
+  destroyChart('top-villages');
+  const top10 = [...results].sort((a,b)=>b.rainfall_mm-a.rainfall_mm).slice(0,10);
+  chartInstances['top-villages'] = new Chart(document.getElementById('chart-top-villages'), {
+    type:'bar',
+    data:{ labels:top10.map(r=>r.village), datasets:[{ label:'Rainfall (mm)', data:top10.map(r=>r.rainfall_mm), backgroundColor:top10.map(r=>COLORS[r.alert_level]), borderRadius:4, borderSkipped:false }] },
+    options:{indexAxis:'y',...chartDefaults, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true,ticks:{font:{size:9}}},y:{ticks:{font:{size:9}}}}}
+  });
+
+  destroyChart('canal-dist');
+  const bins=[0,1,2,5,10,20,50,999], binLabels=['<1km','1-2km','2-5km','5-10km','10-20km','20-50km','>50km'];
+  const binCounts=new Array(7).fill(0);
+  results.forEach(r => {
+    const d=r.dist_canal_km;
+    for(let i=0;i<bins.length-1;i++){ if(d>=bins[i]&&d<bins[i+1]){binCounts[i]++;break;} }
+  });
+  chartInstances['canal-dist'] = new Chart(document.getElementById('chart-canal-dist'), {
+    type:'bar',
+    data:{ labels:binLabels, datasets:[{ label:'Villages', data:binCounts, backgroundColor:'#6366f1', borderRadius:4, borderSkipped:false }] },
+    options:{...chartDefaults, plugins:{legend:{display:false}}, scales:{x:{ticks:{font:{size:9}}},y:{beginAtZero:true,ticks:{font:{size:9}}}}}
+  });
+
+  destroyChart('rain-cat');
+  const cats={};
+  results.forEach(r => { cats[r.rainfall_category]=(cats[r.rainfall_category]||0)+1; });
+  chartInstances['rain-cat'] = new Chart(document.getElementById('chart-rain-cat'), {
+    type:'pie',
+    data:{ labels:Object.keys(cats), datasets:[{ data:Object.values(cats), backgroundColor:['#94a3b8','#22c55e','#3b82f6','#f97316','#ef4444','#a855f7'], borderWidth:3, borderColor:'white' }] },
+    options:{...chartDefaults, plugins:{legend:{position:'right',labels:{font:{family:'Plus Jakarta Sans',size:10},padding:8}}}}
+  });
+}
+
+document.getElementById('inp-rain').addEventListener('keydown', e => { if(e.key==='Enter') runPrediction(); });
+</script>
+</body>
+</html>
