@@ -11,7 +11,7 @@
 ![Leaflet](https://img.shields.io/badge/Leaflet.js-Interactive%20Map-brightgreen?style=for-the-badge\&logo=leaflet\&logoColor=white)
 
 🔴 **Live Application:**
-https://ap-rainfall-warning-system.onrender.com/
+https://ap-rainfall-warning-system.vercel.app/
 
 </div>
 
@@ -53,7 +53,7 @@ It classifies villages into risk levels and supports **data-driven decision-maki
 | Backend             | Flask (REST API)             |
 | Frontend            | Leaflet.js, Chart.js         |
 | Storage             | Parquet (PyArrow)            |
-| Deployment          | Render                       |
+| Deployment          | Vercel                       |
 
 ---
 
@@ -149,7 +149,7 @@ Focused on building real-world, data-driven solutions
 
 ## 🔗 Project Links
 
-* 🌐 Live Application: https://ap-rainfall-warning-system.onrender.com/
+* 🌐 Live Application:Live Application: https://ap-rainfall-warning-system.vercel.app/
 * 📊 Dataset & Notebook: https://drive.google.com/drive/folders/1kqtmTKg7kaSwS_vjUwMb2I_o5XwqSsup?usp=drive_link
 
 ---
